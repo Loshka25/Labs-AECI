@@ -86,7 +86,7 @@ bool compress_file(const std::string& input_name, const std::string& output_name
     // Записываем длину и таблицу частот
     std::ofstream out(output_name, std::ios::binary);
     if (!out) {
-        std::cerr << "Не могу создать файл '" << output_name << "'\n";
+        std::cerr << "Невозможно создать файл '" << output_name << "'\n";
         return false;
     }
 
@@ -173,7 +173,7 @@ bool compress_file(const std::string& input_name, const std::string& output_name
     f1.close(); f2.close();
 
     double saved = (size1 > 0) ? (1.0 - (double)size2 / size1) * 100.0 : 0.0;
-    std::cout << "\n✅ Сжатие завершено!\n";
+    std::cout << "\n Сжатие завершено!\n";
     std::cout << "Было: " << size1 << " байт\n";
     std::cout << "Стало: " << size2 << " байт\n";
     std::cout << "Экономия: " << saved << "%\n";
@@ -221,7 +221,7 @@ bool decompress_file(const std::string& input_name, const std::string& output_na
     uint32_t low = 0, high = MAX_RANGE;
     std::ofstream out(output_name, std::ios::binary);
     if (!out) {
-        std::cerr << "Не могу создать файл '" << output_name << "'\n";
+        std::cerr << "Невозможно создать файл '" << output_name << "'\n";
         return false;
     }
 
@@ -276,17 +276,14 @@ bool decompress_file(const std::string& input_name, const std::string& output_na
     in.close();
     out.close();
 
-    std::cout << "\n✅ Распаковка завершена!\n";
+    std::cout << "\n Распаковка завершена!\n";
     std::cout << "Восстановлено " << total << " байт.\n";
     return true;
 }
 
 // ОСНОВНАЯ ПРОГРАММА
 int main() {
-    setlocale(0, ""); // Русский язык в консоли
-
-    std::cout << "โปรแแกรมма арифметического сжатия\n";
-    std::cout << "==================================\n";
+    setlocale(LC_ALL, "");
     std::cout << "1 — Сжать файл\n";
     std::cout << "2 — Распаковать файл\n";
     std::cout << "Ваш выбор (1 или 2): ";
@@ -329,4 +326,5 @@ int main() {
     }
 
     return 0;
+
 }
