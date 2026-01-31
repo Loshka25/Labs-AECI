@@ -106,7 +106,7 @@ TreeNode* buildTree(const map<char, int>& freqMap) {
 }
 
 void encodeFile() {
-    // Шаг 1: Чтение файла и подсчёт частот
+    //Чтение файла и подсчёт частот
     ifstream input("text.txt", ios::binary);
     if (!input) {
         cerr << "Ошибка: не найден файл text.txt\n";
@@ -128,7 +128,7 @@ void encodeFile() {
         return;
     }
 
-    // Шаг 2: Построение дерева и генерация кодов
+    //Построение дерева и генерация кодов
     TreeNode* root = buildTree(freqMap);
     if (!root) {
         cerr << "Ошибка: не удалось построить дерево.\n";
@@ -139,7 +139,7 @@ void encodeFile() {
     vector<bool> emptyCode;
     generateCodes(root, emptyCode, codeMap);
 
-    // Шаг 3: Кодирование данных в память
+    //Кодирование данных в память
     ifstream input2("text.txt", ios::binary);
     vector<unsigned char> encodedBytes;
     unsigned char buffer = 0;
@@ -168,7 +168,7 @@ void encodeFile() {
 
     input2.close();
 
-    // Шаг 4: Запись заголовка и тела в выходной файл
+    //Запись заголовка и тела в выходной файл
     ofstream output("encoded.txt", ios::binary);
     if (!output) {
         cerr << "Ошибка: не удалось создать encoded.txt\n";
@@ -207,7 +207,7 @@ void decodeFile() {
         return;
     }
 
-    // Особый случай: файл состоит из одного символа
+    //Если файл состоит из одного символа
     if (!root->left && !root->right) {
         ofstream output("decoded.txt", ios::binary);
         for (size_t i = 0; i < originalSize; ++i) {
