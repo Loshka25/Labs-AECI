@@ -1,9 +1,9 @@
-﻿#include <iostream>
+#include <iostream>
 #include <vector>
 #include <map>
 #include <queue>
 #include <fstream>
-#include <memory> 
+#include <cstdint>
 
 using namespace std;
 
@@ -13,10 +13,7 @@ struct TreeNode {
     TreeNode* left;
     TreeNode* right;
 
-    // Конструктор для листа
     TreeNode(char c, int f) : ch(c), freq(f), left(nullptr), right(nullptr) {}
-
-    // Конструктор для внутреннего узла
     TreeNode(TreeNode* l, TreeNode* r) : ch(0), freq(l->freq + r->freq), left(l), right(r) {}
 
     ~TreeNode() {
@@ -27,7 +24,7 @@ struct TreeNode {
 
 struct Compare {
     bool operator()(TreeNode* a, TreeNode* b) {
-        return a->freq > b->freq;
+        return a->freq > b->freq; // min-heap
     }
 };
 
@@ -35,52 +32,63 @@ void generateCodes(TreeNode* node, const vector<bool>& code, map<char, vector<bo
     if (!node) return;
 
     if (!node->left && !node->right) {
-        // Лист
-        codeMap[node->ch] = code;
+        // Случай одного символа: код не должен быть пустым
+        if (code.empty()) {
+            codeMap[node->ch] = { false };
+        }
+        else {
+            codeMap[node->ch] = code;
+        }
         return;
     }
 
-    // Влево — 0
     vector<bool> leftCode = code;
     leftCode.push_back(false);
     generateCodes(node->left, leftCode, codeMap);
 
-    // Вправо — 1
     vector<bool> rightCode = code;
     rightCode.push_back(true);
     generateCodes(node->right, rightCode, codeMap);
 }
 
-// Запись таблицы частот + длины исходного файла
-void writeHeader(ofstream& out, const map<char, int>& freqMap, size_t originalSize) {
-    int size = static_cast<int>(freqMap.size());
+void writeHeader(ofstream& out, const map<char, int>& freqMap, size_t originalSize, int paddingBits) {
+    uint32_t size = static_cast<uint32_t>(freqMap.size());
+    uint64_t origSize = static_cast<uint64_t>(originalSize);
+    uint32_t pad = static_cast<uint32_t>(paddingBits);
+
     out.write(reinterpret_cast<const char*>(&size), sizeof(size));
-    out.write(reinterpret_cast<const char*>(&originalSize), sizeof(originalSize));
+    out.write(reinterpret_cast<const char*>(&origSize), sizeof(origSize));
+    out.write(reinterpret_cast<const char*>(&pad), sizeof(pad));
 
     for (const auto& p : freqMap) {
         out.put(p.first);
-        int freq = p.second;
+        uint32_t freq = static_cast<uint32_t>(p.second);
         out.write(reinterpret_cast<const char*>(&freq), sizeof(freq));
     }
 }
 
-// Чтение заголовка
-map<char, int> readHeader(ifstream& in, size_t& originalSize) {
-    int size;
+map<char, int> readHeader(ifstream& in, size_t& originalSize, int& paddingBits) {
+    uint32_t size;
+    uint64_t origSize;
+    uint32_t pad;
+
     in.read(reinterpret_cast<char*>(&size), sizeof(size));
-    in.read(reinterpret_cast<char*>(&originalSize), sizeof(originalSize));
+    in.read(reinterpret_cast<char*>(&origSize), sizeof(origSize));
+    in.read(reinterpret_cast<char*>(&pad), sizeof(pad));
+
+    originalSize = static_cast<size_t>(origSize);
+    paddingBits = static_cast<int>(pad);
 
     map<char, int> freqMap;
-    for (int i = 0; i < size; ++i) {
+    for (uint32_t i = 0; i < size; ++i) {
         char ch = in.get();
-        int freq;
+        uint32_t freq;
         in.read(reinterpret_cast<char*>(&freq), sizeof(freq));
-        freqMap[ch] = freq;
+        freqMap[ch] = static_cast<int>(freq);
     }
     return freqMap;
 }
 
-// Построение дерева 
 TreeNode* buildTree(const map<char, int>& freqMap) {
     priority_queue<TreeNode*, vector<TreeNode*>, Compare> pq;
 
@@ -97,15 +105,14 @@ TreeNode* buildTree(const map<char, int>& freqMap) {
     return pq.empty() ? nullptr : pq.top();
 }
 
-// Кодирование файла
 void encodeFile() {
+    // Шаг 1: Чтение файла и подсчёт частот
     ifstream input("text.txt", ios::binary);
     if (!input) {
         cerr << "Ошибка: не найден файл text.txt\n";
         return;
     }
 
-    // Считаем частоты и размер
     map<char, int> freqMap;
     size_t originalSize = 0;
     char c;
@@ -121,27 +128,21 @@ void encodeFile() {
         return;
     }
 
-    // Строим дерево
-    unique_ptr<TreeNode> root(buildTree(freqMap));
-
-    // Генерируем коды
-    map<char, vector<bool>> codeMap;
-    vector<bool> emptyCode;
-    generateCodes(root.get(), emptyCode, codeMap);
-
-    // Открываем выходной файл
-    ofstream output("encoded.txt", ios::binary);
-    if (!output) {
-        cerr << "Ошибка: не удалось создать encoded.txt\n";
+    // Шаг 2: Построение дерева и генерация кодов
+    TreeNode* root = buildTree(freqMap);
+    if (!root) {
+        cerr << "Ошибка: не удалось построить дерево.\n";
         return;
     }
 
-    // Записываем заголовок
-    writeHeader(output, freqMap, originalSize);
+    map<char, vector<bool>> codeMap;
+    vector<bool> emptyCode;
+    generateCodes(root, emptyCode, codeMap);
 
-    // Кодируем данные
+    // Шаг 3: Кодирование данных в память
     ifstream input2("text.txt", ios::binary);
-    char buffer = 0;
+    vector<unsigned char> encodedBytes;
+    unsigned char buffer = 0;
     int bitCount = 0;
 
     while (input2.get(c)) {
@@ -151,26 +152,38 @@ void encodeFile() {
                 buffer |= (1 << (7 - bitCount));
             }
             bitCount++;
-
             if (bitCount == 8) {
-                output.put(buffer);
+                encodedBytes.push_back(buffer);
                 buffer = 0;
                 bitCount = 0;
             }
         }
     }
 
-    // Записываем остаток
+    int paddingBits = 0;
     if (bitCount > 0) {
-        output.put(buffer);
+        paddingBits = 8 - bitCount;
+        encodedBytes.push_back(buffer);
     }
 
     input2.close();
+
+    // Шаг 4: Запись заголовка и тела в выходной файл
+    ofstream output("encoded.txt", ios::binary);
+    if (!output) {
+        cerr << "Ошибка: не удалось создать encoded.txt\n";
+        delete root;
+        return;
+    }
+
+    writeHeader(output, freqMap, originalSize, paddingBits);
+    output.write(reinterpret_cast<const char*>(encodedBytes.data()), encodedBytes.size());
     output.close();
+
+    delete root;
     cout << "Кодирование завершено. Исходный размер: " << originalSize << " байт.\n";
 }
 
-// Декодирование файла
 void decodeFile() {
     ifstream input("encoded.txt", ios::binary);
     if (!input) {
@@ -178,9 +191,9 @@ void decodeFile() {
         return;
     }
 
-    // Читаем заголовок
     size_t originalSize;
-    map<char, int> freqMap = readHeader(input, originalSize);
+    int paddingBits;
+    map<char, int> freqMap = readHeader(input, originalSize, paddingBits);
 
     if (originalSize == 0) {
         ofstream("decoded.txt", ios::binary).close();
@@ -188,22 +201,58 @@ void decodeFile() {
         return;
     }
 
-    // Строим дерево
-    unique_ptr<TreeNode> root(buildTree(freqMap));
+    TreeNode* root = buildTree(freqMap);
     if (!root) {
         cerr << "Ошибка: не удалось восстановить дерево.\n";
         return;
     }
 
-    // Декодируем
+    // Особый случай: файл состоит из одного символа
+    if (!root->left && !root->right) {
+        ofstream output("decoded.txt", ios::binary);
+        for (size_t i = 0; i < originalSize; ++i) {
+            output.put(root->ch);
+        }
+        output.close();
+        delete root;
+        cout << "Декодирование завершено. Восстановлено " << originalSize << " байт.\n";
+        return;
+    }
+
+    // Обычное декодирование
     ofstream output("decoded.txt", ios::binary);
-    TreeNode* current = root.get();
+    TreeNode* current = root;
     size_t decodedBytes = 0;
 
+    // Определяем, сколько битов нужно прочитать (без padding)
+    input.seekg(0, ios::end);
+    size_t fileSize = input.tellg();
+    input.seekg(0);
+
+    // Пропускаем заголовок
+    uint32_t size;
+    uint64_t origSize;
+    uint32_t pad;
+    input.read(reinterpret_cast<char*>(&size), sizeof(size));
+    input.read(reinterpret_cast<char*>(&origSize), sizeof(origSize));
+    input.read(reinterpret_cast<char*>(&pad), sizeof(pad));
+    for (uint32_t i = 0; i < size; ++i) {
+        input.get(); // символ
+        uint32_t f;
+        input.read(reinterpret_cast<char*>(&f), sizeof(f)); // частота
+    }
+
+    size_t bodySize = fileSize - static_cast<size_t>(input.tellg());
+    int totalBitsToRead = static_cast<int>(bodySize * 8) - paddingBits;
+    int bitsProcessed = 0;
+
     char byte;
-    while (input.get(byte) && decodedBytes < originalSize) {
-        for (int i = 7; i >= 0 && decodedBytes < originalSize; --i) {
+    while (input.get(byte) && decodedBytes < originalSize && bitsProcessed < totalBitsToRead) {
+        for (int i = 7; i >= 0; --i) {
+            if (bitsProcessed >= totalBitsToRead) break;
+
             bool bit = (byte >> i) & 1;
+            bitsProcessed++;
 
             if (bit) {
                 current = current->right;
@@ -215,16 +264,17 @@ void decodeFile() {
             if (!current->left && !current->right) {
                 output.put(current->ch);
                 decodedBytes++;
-                current = root.get();
+                current = root;
+                if (decodedBytes >= originalSize) break;
             }
         }
     }
 
     output.close();
     input.close();
+    delete root;
     cout << "Декодирование завершено. Восстановлено " << decodedBytes << " байт.\n";
 }
-
 
 int main() {
     setlocale(LC_ALL, "Russian");
